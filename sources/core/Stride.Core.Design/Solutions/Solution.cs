@@ -130,8 +130,16 @@ public class Solution
     /// Saves this instance to the specified path.
     /// </summary>
     /// <param name="solutionPath">The solution path.</param>
+    /// <exception cref="NotSupportedException">The path uses the XML based <c>.slnx</c> format, which is currently read-only.</exception>
     public void SaveAs(string solutionPath)
     {
+        // Writing only supports the legacy text based .sln format. Routing a .slnx through the text
+        // writer would corrupt the file, so fail explicitly instead.
+        if (IsXmlSolution(solutionPath))
+        {
+            throw new NotSupportedException($"Saving the XML based '.slnx' solution format is not supported. Path: '{solutionPath}'.");
+        }
+
         // If the solution file already exists, we want to write it only if it has actually changed, to prevent Visual Studio to reload the solution
         if (File.Exists(solutionPath))
         {
@@ -176,6 +184,12 @@ public class Solution
     /// <returns>Solution.</returns>
     public static Solution FromFile(string solutionFullPath)
     {
+        if (IsXmlSolution(solutionFullPath))
+        {
+            using var stream = new FileStream(solutionFullPath, FileMode.Open, FileAccess.Read);
+            return SlnxReader.ReadSolutionFile(solutionFullPath, stream);
+        }
+
         using var reader = new SolutionReader(solutionFullPath);
         var solution = reader.ReadSolutionFile();
         solution.FullPath = solutionFullPath;
@@ -190,9 +204,19 @@ public class Solution
     /// <returns>Solution.</returns>
     public static Solution FromStream(string solutionFullPath, Stream stream)
     {
+        if (IsXmlSolution(solutionFullPath))
+        {
+            return SlnxReader.ReadSolutionFile(solutionFullPath, stream);
+        }
+
         using var reader = new SolutionReader(solutionFullPath, stream);
         var solution = reader.ReadSolutionFile();
         solution.FullPath = solutionFullPath;
         return solution;
+    }
+
+    private static bool IsXmlSolution(string solutionFullPath)
+    {
+        return Path.GetExtension(solutionFullPath).Equals(".slnx", StringComparison.OrdinalIgnoreCase);
     }
 }
